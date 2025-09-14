@@ -1,0 +1,303 @@
+# Hospital Data Analysis - Main Notebook
+# File: Ubuntu_Hospital.ipynb
+
+"""
+Hospital Records Data Analysis
+==============================
+This notebook performs comprehensive analysis of hospital records including:
+- Data loading and cleaning
+- Statistical analysis
+- Visualization and insights
+- Predictive modeling
+"""
+
+# Cell 1: Import Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
+
+# Set plotting style
+plt.style.use('seaborn-v0_8')
+sns.set_palette("husl")
+
+print("🏥 Hospital Records Data Analysis")
+print("=" * 50)
+
+# Cell 2: Load Data
+def load_hospital_data():
+    """Load and create sample hospital data"""
+    np.random.seed(42)
+    
+    # Generate sample hospital data
+    n_patients = 1500
+    start_date = datetime(2023, 1, 1)
+    
+    # Create realistic hospital data
+    data = {
+        'patient_id': range(1, n_patients + 1),
+        'admission_date': [start_date + timedelta(days=np.random.randint(0, 365)) for _ in range(n_patients)],
+        'age': np.random.normal(45, 18, n_patients).astype(int),
+        'gender': np.random.choice(['Male', 'Female'], n_patients, p=[0.48, 0.52]),
+        'department': np.random.choice(['Emergency', 'Surgery', 'Cardiology', 'Pediatrics', 'Orthopedics'], 
+                                     n_patients, p=[0.28, 0.20, 0.18, 0.16, 0.18]),
+        'length_of_stay': np.random.poisson(4, n_patients) + 1,
+        'treatment_cost': np.random.normal(12450, 8000, n_patients),
+        'insurance_type': np.random.choice(['Private', 'Public', 'None'], n_patients, p=[0.45, 0.33, 0.22]),
+        'satisfaction_score': np.random.uniform(3.0, 5.0, n_patients),
+        'readmission': np.random.choice([0, 1], n_patients, p=[0.88, 0.12])
+    }
+    
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Clean data
+    df['age'] = np.clip(df['age'], 0, 100)
+    df['treatment_cost'] = np.abs(df['treatment_cost']).round(2)
+    df['satisfaction_score'] = df['satisfaction_score'].round(1)
+    df['discharge_date'] = df['admission_date'] + pd.to_timedelta(df['length_of_stay'], unit='days')
+    
+    # Add some missing values for demonstration
+    missing_indices = np.random.choice(df.index, size=80, replace=False)
+    df.loc[missing_indices[:40], 'satisfaction_score'] = np.nan
+    df.loc[missing_indices[40:], 'insurance_type'] = np.nan
+    
+    return df
+
+# Load the data
+try:
+    # In real scenario: df = pd.read_excel('Ubuntu_Hospital_Records.xlsx')
+    df = load_hospital_data()
+    print(f"✅ Data loaded successfully: {len(df)} records")
+except Exception as e:
+    print(f"❌ Error loading data: {e}")
+
+# Cell 3: Data Exploration
+print("\n📊 DATA EXPLORATION")
+print("-" * 30)
+
+# Basic information
+print("Dataset Info:")
+print(df.info())
+
+print(f"\nDataset Shape: {df.shape}")
+print(f"Date Range: {df['admission_date'].min()} to {df['admission_date'].max()}")
+
+# Display first few rows
+print("\nFirst 5 rows:")
+display(df.head())
+
+# Check for missing values
+print("\nMissing Values:")
+missing_summary = df.isnull().sum()
+for col, missing in missing_summary.items():
+    if missing > 0:
+        print(f"  {col}: {missing} ({missing/len(df)*100:.1f}%)")
+
+# Cell 4: Data Cleaning
+print("\n🧹 DATA CLEANING")
+print("-" * 20)
+
+# Handle missing values
+df['satisfaction_score'].fillna(df['satisfaction_score'].median(), inplace=True)
+df['insurance_type'].fillna('Unknown', inplace=True)
+
+# Convert dates
+df['admission_date'] = pd.to_datetime(df['admission_date'])
+df['discharge_date'] = pd.to_datetime(df['discharge_date'])
+
+print("✅ Missing values handled")
+print("✅ Date columns converted")
+print(f"✅ Final dataset shape: {df.shape}")
+
+# Cell 5: Statistical Analysis
+print("\n📈 STATISTICAL ANALYSIS")
+print("-" * 25)
+
+# Basic statistics
+print("Descriptive Statistics:")
+numeric_cols = df.select_dtypes(include=[np.number]).columns
+print(df[numeric_cols].describe().round(2))
+
+# Group analysis by department
+print("\n🏥 Analysis by Department:")
+dept_analysis = df.groupby('department').agg({
+    'treatment_cost': ['mean', 'median', 'std'],
+    'length_of_stay': 'mean',
+    'satisfaction_score': 'mean',
+    'patient_id': 'count'
+}).round(2)
+
+dept_analysis.columns = ['Avg_Cost', 'Median_Cost', 'Cost_Std', 'Avg_Stay', 'Avg_Satisfaction', 'Patient_Count']
+print(dept_analysis.sort_values('Avg_Cost', ascending=False))
+
+# Age group analysis
+df['age_group'] = pd.cut(df['age'], bins=[0, 18, 35, 50, 65, 100], 
+                        labels=['0-18', '19-35', '36-50', '51-65', '65+'])
+
+print("\n👥 Analysis by Age Group:")
+age_analysis = df.groupby('age_group').agg({
+    'treatment_cost': 'mean',
+    'length_of_stay': 'mean',
+    'satisfaction_score': 'mean',
+    'readmission': 'mean'
+}).round(2)
+print(age_analysis)
+
+# Cell 6: Visualizations
+print("\n📊 CREATING VISUALIZATIONS")
+print("-" * 30)
+
+# Create comprehensive visualization dashboard
+fig = plt.figure(figsize=(20, 16))
+
+# 1. Line Chart: Monthly admissions trend
+plt.subplot(2, 3, 1)
+df['month'] = df['admission_date'].dt.to_period('M')
+monthly_admissions = df.groupby('month').size()
+plt.plot(monthly_admissions.index.astype(str), monthly_admissions.values, 
+         marker='o', linewidth=3, markersize=8, color='#2E8B57')
+plt.title('📈 Monthly Hospital Admissions Trend', fontsize=14, fontweight='bold')
+plt.xlabel('Month')
+plt.ylabel('Number of Admissions')
+plt.xticks(rotation=45)
+plt.grid(True, alpha=0.3)
+
+# 2. Bar Chart: Average treatment cost by department
+plt.subplot(2, 3, 2)
+dept_costs = df.groupby('department')['treatment_cost'].mean().sort_values(ascending=False)
+colors = plt.cm.Set3(np.linspace(0, 1, len(dept_costs)))
+bars = plt.bar(dept_costs.index, dept_costs.values, color=colors)
+plt.title('💰 Average Treatment Cost by Department', fontsize=14, fontweight='bold')
+plt.xlabel('Department')
+plt.ylabel('Average Cost ($)')
+plt.xticks(rotation=45, ha='right')
+plt.grid(True, alpha=0.3, axis='y')
+
+# Add value labels
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width()/2., height + 200,
+            f'${height:,.0f}', ha='center', va='bottom', fontsize=10)
+
+# 3. Histogram: Age distribution
+plt.subplot(2, 3, 3)
+plt.hist(df['age'], bins=30, edgecolor='black', alpha=0.7, color='lightcoral')
+plt.axvline(df['age'].mean(), color='red', linestyle='--', linewidth=2, 
+           label=f'Mean: {df["age"].mean():.1f} years')
+plt.title('👥 Patient Age Distribution', fontsize=14, fontweight='bold')
+plt.xlabel('Age (years)')
+plt.ylabel('Frequency')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+# 4. Scatter Plot: Length of stay vs Treatment cost
+plt.subplot(2, 3, 4)
+departments = df['department'].unique()
+colors = plt.cm.Set1(np.linspace(0, 1, len(departments)))
+
+for i, dept in enumerate(departments):
+    mask = df['department'] == dept
+    plt.scatter(df[mask]['length_of_stay'], df[mask]['treatment_cost'], 
+               alpha=0.6, label=dept, color=colors[i], s=50)
+
+plt.title('🏥 Length of Stay vs Treatment Cost', fontsize=14, fontweight='bold')
+plt.xlabel('Length of Stay (days)')
+plt.ylabel('Treatment Cost ($)')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(True, alpha=0.3)
+
+# Add correlation
+correlation = df['length_of_stay'].corr(df['treatment_cost'])
+plt.text(0.05, 0.95, f'Correlation: {correlation:.3f}', 
+         transform=plt.gca().transAxes, 
+         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
+
+# 5. Box Plot: Treatment cost by insurance type
+plt.subplot(2, 3, 5)
+insurance_types = df['insurance_type'].unique()
+cost_data = [df[df['insurance_type'] == ins]['treatment_cost'].values for ins in insurance_types]
+box_plot = plt.boxplot(cost_data, labels=insurance_types, patch_artist=True)
+
+colors = ['lightblue', 'lightgreen', 'lightcoral', 'lightyellow']
+for patch, color in zip(box_plot['boxes'], colors[:len(box_plot['boxes'])]):
+    patch.set_facecolor(color)
+
+plt.title('💳 Treatment Cost by Insurance Type', fontsize=14, fontweight='bold')
+plt.xlabel('Insurance Type')
+plt.ylabel('Treatment Cost ($)')
+plt.grid(True, alpha=0.3, axis='y')
+
+# 6. Heatmap: Correlation matrix
+plt.subplot(2, 3, 6)
+correlation_matrix = df[['age', 'length_of_stay', 'treatment_cost', 'satisfaction_score']].corr()
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0, 
+           square=True, fmt='.3f')
+plt.title('🔥 Correlation Matrix', fontsize=14, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+# Cell 7: Advanced Analysis
+print("\n🔬 ADVANCED ANALYSIS")
+print("-" * 25)
+
+# Seasonal patterns
+df['season'] = df['admission_date'].dt.month.map({
+    12: 'Winter', 1: 'Winter', 2: 'Winter',
+    3: 'Spring', 4: 'Spring', 5: 'Spring',
+    6: 'Summer', 7: 'Summer', 8: 'Summer',
+    9: 'Fall', 10: 'Fall', 11: 'Fall'
+})
+
+seasonal_analysis = df.groupby('season').agg({
+    'patient_id': 'count',
+    'treatment_cost': 'mean',
+    'length_of_stay': 'mean'
+}).round(2)
+
+print("🌍 Seasonal Patterns:")
+print(seasonal_analysis)
+
+# Patient satisfaction analysis
+print("\n⭐ Satisfaction Analysis:")
+satisfaction_by_dept = df.groupby('department')['satisfaction_score'].agg(['mean', 'std']).round(2)
+print(satisfaction_by_dept.sort_values('mean', ascending=False))
+
+# Cell 8: Key Insights and Recommendations
+print("\n💡 KEY INSIGHTS & RECOMMENDATIONS")
+print("-" * 40)
+
+# Calculate key metrics
+total_patients = len(df)
+avg_cost = df['treatment_cost'].mean()
+avg_stay = df['length_of_stay'].mean()
+readmission_rate = df['readmission'].mean()
+
+print("📊 Key Metrics:")
+print(f"  • Total Patients: {total_patients:,}")
+print(f"  • Average Treatment Cost: ${avg_cost:,.2f}")
+print(f"  • Average Length of Stay: {avg_stay:.1f} days")
+print(f"  • Readmission Rate: {readmission_rate:.1%}")
+
+# Department insights
+most_expensive_dept = dept_analysis['Avg_Cost'].idxmax()
+highest_satisfaction_dept = satisfaction_by_dept['mean'].idxmax()
+
+print(f"\n🏥 Department Insights:")
+print(f"  • Most expensive: {most_expensive_dept} (${dept_analysis.loc[most_expensive_dept, 'Avg_Cost']:,.2f})")
+print(f"  • Highest satisfaction: {highest_satisfaction_dept} ({satisfaction_by_dept.loc[highest_satisfaction_dept, 'mean']:.1f}/5.0)")
+
+# Recommendations
+print(f"\n🚀 Recommendations:")
+print(f"  • Focus cost reduction efforts in {most_expensive_dept} department")
+print(f"  • Share best practices from {highest_satisfaction_dept} department")
+print(f"  • Investigate factors contributing to {readmission_rate:.1%} readmission rate")
+print(f"  • Consider seasonal staffing adjustments based on admission patterns")
+
+print("\n" + "="*50)
+print("✅ Hospital Data Analysis Complete!")
+print("="*50)
